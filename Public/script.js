@@ -21,48 +21,120 @@ function setStatus(msg, cls) {
   statusEl.className = "status " + (cls || "");
 }
 
-function checkWinner() {
-  for (const [a, b, c] of WINNING_COMBOS) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return { winner: board[a], combo: [a, b, c] };
+function checkWinner(b) {
+  for (const [a, bc, c] of WINNING_COMBOS) {
+    if (b[a] && b[a] === b[bc] && b[a] === b[c]) {
+      return b[a];
     }
   }
-  if (board.every(cell => cell !== null)) return { winner: null, combo: [] };
+  if (b.every(cell => cell !== null)) return "draw";
   return null;
+}
+
+function getWinningCombo(b) {
+  for (const combo of WINNING_COMBOS) {
+    const [a, bc, c] = combo;
+    if (b[a] && b[a] === b[bc] && b[a] === b[c]) return combo;
+  }
+  return null;
+}
+
+// Minimax algorithm
+function minimax(b, isMaximizing) {
+  const result = checkWinner(b);
+  if (result === "O") return 10;
+  if (result === "X") return -10;
+  if (result === "draw") return 0;
+
+  if (isMaximizing) {
+    let best = -Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (!b[i]) {
+        b[i] = "O";
+        best = Math.max(best, minimax(b, false));
+        b[i] = null;
+      }
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (!b[i]) {
+        b[i] = "X";
+        best = Math.min(best, minimax(b, true));
+        b[i] = null;
+      }
+    }
+    return best;
+  }
+}
+
+function getBotMove() {
+  let bestScore = -Infinity;
+  let bestMove = null;
+  for (let i = 0; i < 9; i++) {
+    if (!board[i]) {
+      board[i] = "O";
+      const score = minimax(board, false);
+      board[i] = null;
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = i;
+      }
+    }
+  }
+  return bestMove;
+}
+
+function placeMarker(idx, player) {
+  board[idx] = player;
+  const cell = cells[idx];
+  cell.classList.add("taken", player.toLowerCase());
+  const mark = document.createElement("span");
+  mark.className = "mark";
+  mark.textContent = player;
+  cell.appendChild(mark);
+}
+
+function handleResult() {
+  const winner = checkWinner(board);
+  if (winner) {
+    gameOver = true;
+    if (winner === "draw") {
+      scores.D++;
+      drawScoreEl.textContent = scores.D;
+      setStatus("It's a draw!", "draw");
+    } else {
+      const combo = getWinningCombo(board);
+      combo.forEach(i => cells[i].classList.add("winning"));
+      scores[winner]++;
+      xScoreEl.textContent = scores.X;
+      oScoreEl.textContent = scores.O;
+      setStatus(`Player ${winner} wins!`, "winner");
+    }
+    return true;
+  }
+  return false;
 }
 
 function handleClick(e) {
   const idx = +e.currentTarget.dataset.index;
-  if (gameOver || board[idx]) return;
+  if (gameOver || board[idx] || currentPlayer !== "X") return;
 
-  board[idx] = currentPlayer;
-  const cell = e.currentTarget;
-  cell.classList.add("taken", currentPlayer.toLowerCase());
-  const mark = document.createElement("span");
-  mark.className = "mark";
-  mark.textContent = currentPlayer;
-  cell.appendChild(mark);
+  placeMarker(idx, "X");
+  if (handleResult()) return;
 
-  const result = checkWinner();
+  currentPlayer = "O";
+  setStatus("Bot is thinking...", "o-turn");
 
-  if (result) {
-    gameOver = true;
-    if (result.winner) {
-      result.combo.forEach(i => cells[i].classList.add("winning"));
-      scores[result.winner]++;
-      xScoreEl.textContent = scores.X;
-      oScoreEl.textContent = scores.O;
-      setStatus(`Player ${result.winner} wins!`, "winner");
-    } else {
-      scores.D++;
-      drawScoreEl.textContent = scores.D;
-      setStatus("It's a draw!", "draw");
-    }
-    return;
-  }
-
-  currentPlayer = currentPlayer === "X" ? "O" : "X";
-  setStatus(`Player ${currentPlayer}'s turn`, currentPlayer === "X" ? "x-turn" : "o-turn");
+  // Small delay so it feels natural
+  setTimeout(() => {
+    const botMove = getBotMove();
+    placeMarker(botMove, "O");
+    if (handleResult()) return;
+    currentPlayer = "X";
+    setStatus("Player X's turn", "x-turn");
+  }, 300);
 }
 
 function resetGame() {
